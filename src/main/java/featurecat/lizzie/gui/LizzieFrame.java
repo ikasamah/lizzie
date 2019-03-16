@@ -70,6 +70,7 @@ public class LizzieFrame extends JFrame {
     resourceBundle.getString("LizzieFrame.commands.keyS"),
     resourceBundle.getString("LizzieFrame.commands.keyAltC"),
     resourceBundle.getString("LizzieFrame.commands.keyAltV"),
+    resourceBundle.getString("LizzieFrame.commands.keyCtrlB"),
     resourceBundle.getString("LizzieFrame.commands.keyF"),
     resourceBundle.getString("LizzieFrame.commands.keyV"),
     resourceBundle.getString("LizzieFrame.commands.keyW"),
@@ -1331,6 +1332,20 @@ public class LizzieFrame extends JFrame {
     try {
       // Get sgf content from game
       String sgfContent = SGFParser.saveToString();
+
+      // Save to clipboard
+      Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
+      Transferable transferableString = new StringSelection(sgfContent);
+      clipboard.setContents(transferableString, null);
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
+  }
+
+  public void copyVariationSgf() {
+    try {
+      // Get best moves sgf content from game
+      String sgfContent = SGFParser.saveVariationToString();
 
       // Save to clipboard
       Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();

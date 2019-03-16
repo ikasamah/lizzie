@@ -330,6 +330,12 @@ public class Input implements MouseListener, KeyListener, MouseWheelListener, Mo
         }
         break;
 
+      case VK_B:
+        if (controlIsPressed(e)) {
+          Lizzie.frame.copyVariationSgf();
+        }
+        break;
+
       case VK_ENTER:
         if (!Lizzie.leelaz.isThinking) {
           Lizzie.leelaz.sendCommand(

@@ -9,6 +9,7 @@ import featurecat.lizzie.util.EncodingDetector;
 import java.io.*;
 import java.text.SimpleDateFormat;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Matcher;
@@ -321,6 +322,25 @@ public class SGFParser {
     }
   }
 
+  public static String saveVariationToString() throws IOException {
+    try (StringWriter writer = new StringWriter()) {
+      List<String> variation =
+          Lizzie.leelaz
+              .getBestMoves()
+              .stream()
+              .filter(
+                  move ->
+                      Board.asCoordinates(move.coordinate)
+                          .map(c -> Lizzie.frame.isMouseOver(c[0], c[1]))
+                          .orElse(false))
+              .findFirst()
+              .get()
+              .variation;
+      saveVariationToStream(Lizzie.board, variation, writer);
+      return writer.toString();
+    }
+  }
+
   public static void save(Board board, String filename) throws IOException {
     try (Writer writer = new OutputStreamWriter(new FileOutputStream(filename))) {
       saveToStream(board, writer);
@@ -421,8 +441,19 @@ public class SGFParser {
     writer.append(builder.toString());
   }
 
-  /** Generate node with variations */
+  private static String generateNodeWithoutMove(
+      Board board, BoardHistoryNode node, BoardHistoryNode stopNode) throws IOException {
+    return _generateNode(board, node, stopNode, false);
+  }
+
   private static String generateNode(Board board, BoardHistoryNode node) throws IOException {
+    return _generateNode(board, node, null, true);
+  }
+
+  /** Generate node with variations */
+  private static String _generateNode(
+      Board board, BoardHistoryNode node, BoardHistoryNode stopNode, boolean isMove)
+      throws IOException {
     StringBuilder builder = new StringBuilder("");
 
     if (node != null) {
@@ -431,8 +462,13 @@ public class SGFParser {
       String stone = "";
       if (Stone.BLACK.equals(data.lastMoveColor) || Stone.WHITE.equals(data.lastMoveColor)) {
 
-        if (Stone.BLACK.equals(data.lastMoveColor)) stone = "B";
-        else if (Stone.WHITE.equals(data.lastMoveColor)) stone = "W";
+        if (isMove) {
+          if (Stone.BLACK.equals(data.lastMoveColor)) stone = "B";
+          else if (Stone.WHITE.equals(data.lastMoveColor)) stone = "W";
+        } else {
+          if (Stone.BLACK.equals(data.lastMoveColor)) stone = "AB";
+          else if (Stone.WHITE.equals(data.lastMoveColor)) stone = "AW";
+        }
 
         builder.append(";");
         if (!data.dummy) {
@@ -455,21 +491,147 @@ public class SGFParser {
         }
       }
 
+      if (node.equals(stopNode)) {
+        return builder.toString();
+      }
+
       if (node.numberOfChildren() > 1) {
         // Variation
         for (BoardHistoryNode sub : node.getVariations()) {
           builder.append("(");
-          builder.append(generateNode(board, sub));
+          builder.append(_generateNode(board, sub, stopNode, isMove));
           builder.append(")");
         }
       } else if (node.numberOfChildren() == 1) {
-        builder.append(generateNode(board, node.next().orElse(null)));
+        builder.append(_generateNode(board, node.next().orElse(null), stopNode, isMove));
       } else {
         return builder.toString();
       }
     }
 
     return builder.toString();
+  }
+
+  private static void saveVariationToStream(Board board, List<String> variation, Writer writer)
+      throws IOException {
+    // TODO: DRY with saveToStream
+
+    // collect game info
+    BoardHistoryList history = board.getHistory().shallowCopy();
+    GameInfo gameInfo = history.getGameInfo();
+    String playerB = gameInfo.getPlayerBlack();
+    String playerW = gameInfo.getPlayerWhite();
+    Double komi = gameInfo.getKomi();
+    Integer handicap = gameInfo.getHandicap();
+    String date = SGF_DATE_FORMAT.format(gameInfo.getDate());
+
+    // add SGF header
+    StringBuilder builder = new StringBuilder("(;");
+    StringBuilder generalProps = new StringBuilder("");
+    if (handicap != 0) generalProps.append(String.format("HA[%s]", handicap));
+    generalProps.append(
+        String.format(
+            "KM[%s]PW[%s]PB[%s]DT[%s]AP[Lizzie: %s]SZ[%d]",
+            komi, playerW, playerB, date, Lizzie.lizzieVersion, Board.boardSize));
+
+    // To append the winrate to the comment of sgf we might need to update the Winrate
+    if (Lizzie.config.appendWinrateToComment) {
+      Lizzie.board.updateWinrate();
+    }
+
+    BoardHistoryNode savedHistoryNode = history.getCurrentHistoryNode();
+    // move to the first move
+    history.toStart();
+
+    // Game properties
+    history.getData().addProperties(generalProps.toString());
+    builder.append(history.getData().propertiesString());
+
+    // add handicap stones to SGF
+    if (handicap != 0) {
+      builder.append("AB");
+      Stone[] stones = history.getStones();
+      for (int i = 0; i < stones.length; i++) {
+        Stone stone = stones[i];
+        if (stone.isBlack()) {
+          // i = x * Board.BOARD_SIZE + y;
+          int corY = i % Board.boardSize;
+          int corX = (i - corY) / Board.boardSize;
+
+          char x = (char) (corX + 'a');
+          char y = (char) (corY + 'a');
+          builder.append(String.format("[%c%c]", x, y));
+        }
+      }
+    } else {
+      // Process the AW/AB stone
+      Stone[] stones = history.getStones();
+      StringBuilder abStone = new StringBuilder();
+      StringBuilder awStone = new StringBuilder();
+      for (int i = 0; i < stones.length; i++) {
+        Stone stone = stones[i];
+        if (stone.isBlack() || stone.isWhite()) {
+          // i = x * Board.BOARD_SIZE + y;
+          int corY = i % Board.boardSize;
+          int corX = (i - corY) / Board.boardSize;
+
+          char x = (char) (corX + 'a');
+          char y = (char) (corY + 'a');
+
+          if (stone.isBlack()) {
+            abStone.append(String.format("[%c%c]", x, y));
+          } else {
+            awStone.append(String.format("[%c%c]", x, y));
+          }
+        }
+      }
+      if (abStone.length() > 0) {
+        builder.append("AB").append(abStone);
+      }
+      if (awStone.length() > 0) {
+        builder.append("AW").append(awStone);
+      }
+    }
+
+    // The AW/AB Comment
+    if (!history.getData().comment.isEmpty()) {
+      builder.append(String.format("C[%s]", Escaping(history.getData().comment)));
+    }
+
+    // replay moves, and convert them to tags.
+    // *  format: ";B[xy]" or ";W[xy]"
+    // *  with 'xy' = coordinates ; or 'tt' for pass.
+
+    // Write variation tree
+    builder.append(
+        generateNodeWithoutMove(board, history.getCurrentHistoryNode(), savedHistoryNode));
+
+    Stone lastMoveColor = Stone.BLACK;
+    if (Stone.WHITE.equals(savedHistoryNode.getData().lastMoveColor)) {
+      lastMoveColor = Stone.WHITE;
+    }
+
+    for (String v : variation) {
+      // e.g. A1 to aa
+      Optional<int[]> coord = Board.asCoordinates(v);
+      if (!coord.isPresent()) {
+        break;
+      }
+      char cx = "abcdefghijklmnopqrs".charAt(coord.get()[0]);
+      char cy = "abcdefghijklmnopqrs".charAt(coord.get()[1]);
+      String sgfcoord = String.format("%c%c", cx, cy);
+      if (Stone.BLACK.equals(lastMoveColor)) {
+        builder.append(String.format(";W[%s]", sgfcoord));
+        lastMoveColor = Stone.WHITE;
+      } else {
+        builder.append(String.format(";B[%s]", sgfcoord));
+        lastMoveColor = Stone.BLACK;
+      }
+    }
+
+    // close file
+    builder.append(')');
+    writer.append(builder.toString());
   }
 
   /**
