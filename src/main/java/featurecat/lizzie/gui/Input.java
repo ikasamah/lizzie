@@ -333,6 +333,10 @@ public class Input implements MouseListener, KeyListener, MouseWheelListener, Mo
       case VK_B:
         if (controlIsPressed(e)) {
           Lizzie.frame.copyVariationSgf();
+        } else {
+          // stop the ponder
+          if (Lizzie.leelaz.isPondering()) Lizzie.leelaz.togglePonder();
+          LizzieFrame.saveVariationFile();
         }
         break;
 

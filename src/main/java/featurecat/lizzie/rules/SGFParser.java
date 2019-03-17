@@ -336,7 +336,7 @@ public class SGFParser {
               .findFirst()
               .get()
               .variation;
-      saveVariationToStream(Lizzie.board, variation, writer);
+      saveVariationToStreamWithoutCurrentMove(Lizzie.board, variation, writer);
       return writer.toString();
     }
   }
@@ -344,6 +344,24 @@ public class SGFParser {
   public static void save(Board board, String filename) throws IOException {
     try (Writer writer = new OutputStreamWriter(new FileOutputStream(filename))) {
       saveToStream(board, writer);
+    }
+  }
+
+  public static void saveVariation(Board board, String filename) throws IOException {
+    try (Writer writer = new OutputStreamWriter(new FileOutputStream(filename))) {
+      List<String> variation =
+          Lizzie.leelaz
+              .getBestMoves()
+              .stream()
+              .filter(
+                  move ->
+                      Board.asCoordinates(move.coordinate)
+                          .map(c -> Lizzie.frame.isMouseOver(c[0], c[1]))
+                          .orElse(false))
+              .findFirst()
+              .get()
+              .variation;
+      saveVariationToStream(board, variation, writer);
     }
   }
 
@@ -441,9 +459,10 @@ public class SGFParser {
     writer.append(builder.toString());
   }
 
-  private static String generateNodeWithoutMove(
-      Board board, BoardHistoryNode node, BoardHistoryNode stopNode) throws IOException {
-    return _generateNode(board, node, stopNode, false);
+  private static String generateNodeTillStopNode(
+      Board board, BoardHistoryNode node, BoardHistoryNode stopNode, boolean withMove)
+      throws IOException {
+    return _generateNode(board, node, stopNode, withMove);
   }
 
   private static String generateNode(Board board, BoardHistoryNode node) throws IOException {
@@ -452,7 +471,7 @@ public class SGFParser {
 
   /** Generate node with variations */
   private static String _generateNode(
-      Board board, BoardHistoryNode node, BoardHistoryNode stopNode, boolean isMove)
+      Board board, BoardHistoryNode node, BoardHistoryNode stopNode, boolean withMove)
       throws IOException {
     StringBuilder builder = new StringBuilder("");
 
@@ -462,7 +481,7 @@ public class SGFParser {
       String stone = "";
       if (Stone.BLACK.equals(data.lastMoveColor) || Stone.WHITE.equals(data.lastMoveColor)) {
 
-        if (isMove) {
+        if (withMove) {
           if (Stone.BLACK.equals(data.lastMoveColor)) stone = "B";
           else if (Stone.WHITE.equals(data.lastMoveColor)) stone = "W";
         } else {
@@ -499,11 +518,11 @@ public class SGFParser {
         // Variation
         for (BoardHistoryNode sub : node.getVariations()) {
           builder.append("(");
-          builder.append(_generateNode(board, sub, stopNode, isMove));
+          builder.append(_generateNode(board, sub, stopNode, withMove));
           builder.append(")");
         }
       } else if (node.numberOfChildren() == 1) {
-        builder.append(_generateNode(board, node.next().orElse(null), stopNode, isMove));
+        builder.append(_generateNode(board, node.next().orElse(null), stopNode, withMove));
       } else {
         return builder.toString();
       }
@@ -513,6 +532,17 @@ public class SGFParser {
   }
 
   private static void saveVariationToStream(Board board, List<String> variation, Writer writer)
+      throws IOException {
+    _saveVariationToStream(board, variation, true, writer);
+  }
+
+  private static void saveVariationToStreamWithoutCurrentMove(
+      Board board, List<String> variation, Writer writer) throws IOException {
+    _saveVariationToStream(board, variation, false, writer);
+  }
+
+  private static void _saveVariationToStream(
+      Board board, List<String> variation, boolean withCurrentMove, Writer writer)
       throws IOException {
     // TODO: DRY with saveToStream
 
@@ -602,10 +632,16 @@ public class SGFParser {
     // *  format: ";B[xy]" or ";W[xy]"
     // *  with 'xy' = coordinates ; or 'tt' for pass.
 
-    // Write variation tree
-    builder.append(
-        generateNodeWithoutMove(board, history.getCurrentHistoryNode(), savedHistoryNode));
+    if (withCurrentMove) {
+      builder.append(
+          generateNodeTillStopNode(board, history.getCurrentHistoryNode(), savedHistoryNode, true));
+    } else {
+      builder.append(
+          generateNodeTillStopNode(
+              board, history.getCurrentHistoryNode(), savedHistoryNode, false));
+    }
 
+    // Write variation tree
     Stone lastMoveColor = Stone.BLACK;
     if (Stone.WHITE.equals(savedHistoryNode.getData().lastMoveColor)) {
       lastMoveColor = Stone.WHITE;

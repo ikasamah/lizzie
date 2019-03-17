@@ -70,6 +70,7 @@ public class LizzieFrame extends JFrame {
     resourceBundle.getString("LizzieFrame.commands.keyS"),
     resourceBundle.getString("LizzieFrame.commands.keyAltC"),
     resourceBundle.getString("LizzieFrame.commands.keyAltV"),
+    resourceBundle.getString("LizzieFrame.commands.keyB"),
     resourceBundle.getString("LizzieFrame.commands.keyCtrlB"),
     resourceBundle.getString("LizzieFrame.commands.keyF"),
     resourceBundle.getString("LizzieFrame.commands.keyV"),
@@ -248,7 +249,15 @@ public class LizzieFrame extends JFrame {
     gameInfoDialog.dispose();
   }
 
+  public static void saveVariationFile() {
+    _saveFile(true);
+  }
+
   public static void saveFile() {
+    _saveFile(false);
+  }
+
+  public static void _saveFile(boolean saveVariation) {
     FileNameExtensionFilter filter = new FileNameExtensionFilter("*.sgf", "SGF");
     JSONObject filesystem = Lizzie.config.persisted.getJSONObject("filesystem");
     JFileChooser chooser = new JFileChooser(filesystem.getString("last-folder"));
@@ -272,7 +281,11 @@ public class LizzieFrame extends JFrame {
         file = new File(file.getPath() + ".sgf");
       }
       try {
-        SGFParser.save(Lizzie.board, file.getPath());
+        if (saveVariation) {
+          SGFParser.saveVariation(Lizzie.board, file.getPath());
+        } else {
+          SGFParser.save(Lizzie.board, file.getPath());
+        }
         filesystem.put("last-folder", file.getParent());
       } catch (IOException err) {
         JOptionPane.showConfirmDialog(
