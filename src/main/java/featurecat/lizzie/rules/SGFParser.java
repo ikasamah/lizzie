@@ -515,6 +515,14 @@ public class SGFParser {
       }
 
       if (node.numberOfChildren() > 1) {
+
+        if (stopNode != null && containsStopNode(node.getVariations(), stopNode)) {
+          for (BoardHistoryNode sub : node.getVariations()) {
+            builder.append(_generateNode(board, sub, stopNode, withMove));
+          }
+          return builder.toString();
+        }
+
         // Variation
         for (BoardHistoryNode sub : node.getVariations()) {
           builder.append("(");
@@ -529,6 +537,21 @@ public class SGFParser {
     }
 
     return builder.toString();
+  }
+
+  private static boolean containsStopNode(
+      List<BoardHistoryNode> variations, BoardHistoryNode stopNode) {
+    for (BoardHistoryNode node : variations) {
+      if (node.numberOfChildren() > 1) {
+        if (containsStopNode(node.getVariations(), stopNode)) {
+          return true;
+        }
+      }
+      if (node.equals(stopNode)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private static void saveVariationToStream(Board board, List<String> variation, Writer writer)
