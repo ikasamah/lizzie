@@ -515,19 +515,20 @@ public class SGFParser {
       }
 
       if (node.numberOfChildren() > 1) {
-
-        if (stopNode != null && containsStopNode(node.getVariations(), stopNode)) {
+        if (stopNode == null) {
+          // Variation
           for (BoardHistoryNode sub : node.getVariations()) {
+            builder.append("(");
             builder.append(_generateNode(board, sub, stopNode, withMove));
+            builder.append(")");
           }
-          return builder.toString();
-        }
-
-        // Variation
-        for (BoardHistoryNode sub : node.getVariations()) {
-          builder.append("(");
-          builder.append(_generateNode(board, sub, stopNode, withMove));
-          builder.append(")");
+        } else {
+          for (BoardHistoryNode sub : node.getVariations()) {
+            if (containsStopNode(sub, stopNode)) {
+              builder.append(_generateNode(board, sub, stopNode, withMove));
+              return builder.toString();
+            }
+          }
         }
       } else if (node.numberOfChildren() == 1) {
         builder.append(_generateNode(board, node.next().orElse(null), stopNode, withMove));
@@ -540,14 +541,20 @@ public class SGFParser {
   }
 
   private static boolean containsStopNode(
-      List<BoardHistoryNode> variations, BoardHistoryNode stopNode) {
-    for (BoardHistoryNode node : variations) {
-      if (node.numberOfChildren() > 1) {
-        if (containsStopNode(node.getVariations(), stopNode)) {
-          return true;
+      BoardHistoryNode variationNode, BoardHistoryNode stopNode) {
+    if (variationNode.equals(stopNode)) {
+      return true;
+    }
+    while (variationNode.next().isPresent()) {
+      if (variationNode.numberOfChildren() > 1) {
+        for (BoardHistoryNode sub : variationNode.getVariations()) {
+          if (containsStopNode(sub, stopNode)) {
+            return true;
+          }
         }
       }
-      if (node.equals(stopNode)) {
+      variationNode = variationNode.next().get();
+      if (variationNode.equals(stopNode)) {
         return true;
       }
     }
